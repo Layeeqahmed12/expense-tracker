@@ -1,10 +1,4 @@
-// ============================================
-// EXPENSE TRACKER - FIXED VERSION WITH COMPLETE DATA PERSISTENCE
-// ============================================
-
-// --- PERSISTENT DATA STORAGE ---
 const persistentStorage = {
-  // Save data to window.name (persists across page loads)
   saveData(key, data) {
     try {
       let storage = {};
@@ -13,13 +7,11 @@ const persistentStorage = {
       }
       storage[key] = data;
       window.name = JSON.stringify(storage);
-      console.log('Data saved:', key, data);
     } catch (e) {
       console.error('Error saving data:', e);
     }
   },
 
-  // Load data from window.name
   loadData(key) {
     try {
       if (window.name) {
@@ -32,18 +24,15 @@ const persistentStorage = {
     return null;
   },
 
-  // Clear all data
   clearData() {
     window.name = '';
   }
 };
 
-// --- IN-MEMORY DATABASE WITH PERSISTENCE ---
 const fakeDB = {
   users: [],
   expenses: {},
   
-  // Initialize database from persistent storage
   init() {
     const savedUsers = persistentStorage.loadData('users');
     const savedExpenses = persistentStorage.loadData('expenses');
@@ -51,7 +40,6 @@ const fakeDB = {
     if (savedUsers) {
       this.users = savedUsers;
     } else {
-      // Default admin user
       this.users = [
         { username: 'admin', password: 'admin123', profileName: 'Admin User' }
       ];
@@ -61,32 +49,25 @@ const fakeDB = {
     if (savedExpenses) {
       this.expenses = savedExpenses;
     }
-    
-    console.log('Database initialized:', { users: this.users.length, expenses: Object.keys(this.expenses).length });
   },
 
-  // Save users to persistent storage
   saveUsers() {
     persistentStorage.saveData('users', this.users);
   },
 
-  // Save expenses to persistent storage
   saveExpenses() {
     persistentStorage.saveData('expenses', this.expenses);
   },
 
-  // Add new user
   addUser(username, password, profileName) {
     this.users.push({ username, password, profileName });
     this.saveUsers();
   },
 
-  // Get user by username
   getUser(username) {
     return this.users.find(u => u.username === username);
   },
 
-  // Add expense for user
   addExpense(username, expense) {
     if (!this.expenses[username]) {
       this.expenses[username] = [];
@@ -97,12 +78,10 @@ const fakeDB = {
     return expense;
   },
 
-  // Get expenses for user
   getExpenses(username) {
     return this.expenses[username] || [];
   },
 
-  // Delete expense
   deleteExpense(username, id) {
     if (this.expenses[username]) {
       this.expenses[username] = this.expenses[username].filter(e => e.id !== id);
@@ -113,14 +92,12 @@ const fakeDB = {
   }
 };
 
-// --- SESSION STORAGE ---
 let sessionData = {
   token: null,
   currentUser: null,
   profileName: null
 };
 
-// Session persistence functions
 function saveSession() {
   persistentStorage.saveData('session', sessionData);
 }
@@ -143,17 +120,71 @@ function clearSession() {
   persistentStorage.saveData('session', sessionData);
 }
 
-// --- EMAILJS CONFIGURATION ---
-const EMAILJS_CONFIG = {
-  PUBLIC_KEY: 'YOUR_PUBLIC_KEY', // Replace with your actual EmailJS public key
-  SERVICE_ID: 'YOUR_SERVICE_ID', // Replace with your actual service ID
-  TEMPLATE_ID: 'YOUR_TEMPLATE_ID', // Replace with your actual template ID
-  COMPANY_NAME: 'Advanced Expense Tracker'
-};
+class EmailService {
+  constructor() {
+    this.publicKey = 'kjWbSLN3PELL8SuPF';
+    this.serviceId = 'service_o2x4nie';
+    this.templateId = 'template_d6kfymh';
+    this.initialized = false;
+  }
 
-// --- SERVER SIMULATION ---
+  async init() {
+    if (typeof emailjs === 'undefined') {
+      throw new Error('EmailJS library not loaded');
+    }
+    
+    if (this.publicKey === 'YOUR_PUBLIC_KEY') {
+      throw new Error('EmailJS configuration not set');
+    }
+    
+    emailjs.init(this.publicKey);
+    this.initialized = true;
+  }
+
+  async sendOTP(email, profileName, otpCode) {
+    if (!this.initialized) {
+      await this.init();
+    }
+
+    const expiryTime = new Date();
+    expiryTime.setMinutes(expiryTime.getMinutes() + 15);
+    const formattedTime = expiryTime.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: true 
+    });
+
+    const templateParams = {
+      to_email: email,
+      to_name: profileName,
+      user_name: profileName,
+      passcode: otpCode,
+      otp_code: otpCode,
+      time: formattedTime,
+      company_name: 'Advanced Expense Tracker',
+      from_name: 'Advanced Expense Tracker'
+    };
+
+    try {
+      const response = await emailjs.send(
+        this.serviceId,
+        this.templateId,
+        templateParams
+      );
+      
+      return {
+        success: true,
+        message: `OTP sent successfully to ${email}`,
+        expiryTime: formattedTime
+      };
+    } catch (error) {
+      console.error('Email sending error:', error);
+      throw new Error('Failed to send email: ' + error.message);
+    }
+  }
+}
+
 const server = {
-  // User login
   login: (username, password) => {
     try {
       const user = fakeDB.getUser(username);
@@ -171,7 +202,6 @@ const server = {
     }
   },
 
-  // User registration
   register: (username, password, profileName) => {
     try {
       if (fakeDB.getUser(username)) {
@@ -185,24 +215,20 @@ const server = {
     }
   },
 
-  // Get user expenses
   getExpenses: () => {
     return fakeDB.getExpenses(sessionData.currentUser);
   },
 
-  // Add new expense
   addExpense: (expense) => {
     return fakeDB.addExpense(sessionData.currentUser, expense);
   },
 
-  // Delete expense
   deleteExpense: (id) => {
     const success = fakeDB.deleteExpense(sessionData.currentUser, id);
     return { success };
   }
 };
 
-// Helper function to check current page
 function getCurrentPage() {
   const path = window.location.pathname;
   if (path.includes('login.html')) return 'login';
@@ -210,9 +236,6 @@ function getCurrentPage() {
   return 'main';
 }
 
-// ============================================
-// LOGIN PAGE LOGIC
-// ============================================
 function initLoginPage() {
   const loginForm = document.getElementById('login-form');
   
@@ -232,38 +255,23 @@ function initLoginPage() {
       return;
     }
     
-    console.log('Attempting login with:', { username, password });
-    
     const result = server.login(username, password);
     
     if (result.success) {
-      alert('✅ Login successful!');
+      alert('Login successful!');
       setTimeout(() => {
         window.location.href = 'index.html';
       }, 500);
     } else {
-      alert('❌ ' + (result.message || 'Invalid username or password'));
+      alert(result.message || 'Invalid username or password');
     }
   });
 }
 
-// ============================================
-// REGISTER PAGE LOGIC
-// ============================================
 function initRegisterPage() {
   let generatedOTP = '';
   let otpExpiryTimer = null;
-  let isEmailJSInitialized = false;
-
-  // Initialize EmailJS if available
-  if (typeof emailjs !== 'undefined') {
-    try {
-      emailjs.init(EMAILJS_CONFIG.PUBLIC_KEY);
-      isEmailJSInitialized = true;
-    } catch (error) {
-      console.error('EmailJS initialization failed:', error);
-    }
-  }
+  const emailService = new EmailService();
 
   const sendOTPBtn = document.getElementById('send-otp-btn');
   const registerForm = document.getElementById('register-form');
@@ -274,7 +282,6 @@ function initRegisterPage() {
     return;
   }
 
-  // Send OTP functionality
   sendOTPBtn.addEventListener('click', async () => {
     const email = document.getElementById('email').value.trim();
     const profileName = document.getElementById('profile-name').value.trim();
@@ -291,46 +298,17 @@ function initRegisterPage() {
     }
 
     generatedOTP = Math.floor(100000 + Math.random() * 900000).toString();
-    console.log('Generated OTP:', generatedOTP);
-
+    
     sendOTPBtn.disabled = true;
     sendOTPBtn.textContent = 'Sending OTP...';
 
     try {
-      if (isEmailJSInitialized && EMAILJS_CONFIG.PUBLIC_KEY !== 'YOUR_PUBLIC_KEY') {
-        const expiryTime = new Date();
-        expiryTime.setMinutes(expiryTime.getMinutes() + 15);
-        const formattedTime = expiryTime.toLocaleTimeString('en-US', { 
-          hour: '2-digit', 
-          minute: '2-digit',
-          hour12: true 
-        });
-
-        const templateParams = {
-          to_email: email,
-          to_name: profileName,
-          user_name: profileName,
-          passcode: generatedOTP,
-          otp_code: generatedOTP,
-          time: formattedTime,
-          company_name: EMAILJS_CONFIG.COMPANY_NAME,
-          from_name: EMAILJS_CONFIG.COMPANY_NAME
-        };
-
-        const response = await emailjs.send(
-          EMAILJS_CONFIG.SERVICE_ID,
-          EMAILJS_CONFIG.TEMPLATE_ID,
-          templateParams
-        );
-
-        console.log('Email sent successfully:', response);
-        alert(`✅ OTP sent successfully to ${email}!\n\nPlease check your inbox and spam folder.\nOTP will expire at ${formattedTime}`);
-      } else {
-        alert(`✅ DEMO MODE: OTP generated!\n\nFor demonstration, your OTP is: ${generatedOTP}\n\nIn production, this would be sent to ${email}`);
-      }
+      const result = await emailService.sendOTP(email, profileName, generatedOTP);
+      
+      alert(`OTP sent successfully to ${email}!\n\nPlease check your inbox and spam folder.\nOTP will expire at ${result.expiryTime}`);
       
       otpSection.style.display = 'block';
-      sendOTPBtn.textContent = '✅ OTP Sent';
+      sendOTPBtn.textContent = 'OTP Sent';
       sendOTPBtn.style.background = '#28a745';
 
       if (otpExpiryTimer) {
@@ -339,7 +317,7 @@ function initRegisterPage() {
 
       otpExpiryTimer = setTimeout(() => {
         generatedOTP = '';
-        alert('⏰ OTP has expired. Please request a new one.');
+        alert('OTP has expired. Please request a new one.');
         otpSection.style.display = 'none';
         sendOTPBtn.disabled = false;
         sendOTPBtn.textContent = 'Send OTP';
@@ -348,28 +326,27 @@ function initRegisterPage() {
 
       setTimeout(() => {
         sendOTPBtn.disabled = false;
-        sendOTPBtn.textContent = '🔄 Resend OTP';
+        sendOTPBtn.textContent = 'Resend OTP';
         sendOTPBtn.style.background = '#ffc107';
       }, 30000);
 
     } catch (error) {
       console.error('Email sending error:', error);
       
-      alert(`⚠️ Email service unavailable. DEMO MODE activated.\n\nYour OTP is: ${generatedOTP}\n\nPlease use this OTP to complete registration.`);
+      sendOTPBtn.disabled = false;
+      sendOTPBtn.textContent = 'Send OTP';
+      sendOTPBtn.style.background = '#007bff';
       
-      otpSection.style.display = 'block';
-      sendOTPBtn.textContent = '✅ OTP Generated';
-      sendOTPBtn.style.background = '#28a745';
-      
-      setTimeout(() => {
-        sendOTPBtn.disabled = false;
-        sendOTPBtn.textContent = '🔄 Resend OTP';
-        sendOTPBtn.style.background = '#ffc107';
-      }, 30000);
+      if (error.message.includes('EmailJS configuration')) {
+        alert('Email service not configured. Please contact administrator.');
+      } else if (error.message.includes('EmailJS library')) {
+        alert('Email service unavailable. Please try again later.');
+      } else {
+        alert('Failed to send OTP. Please try again.');
+      }
     }
   });
 
-  // Register form submission
   registerForm.addEventListener('submit', (e) => {
     e.preventDefault();
 
@@ -399,14 +376,14 @@ function initRegisterPage() {
     }
 
     if (enteredOTP !== generatedOTP) {
-      alert('❌ Invalid OTP. Please check and try again.');
+      alert('Invalid OTP. Please check and try again.');
       return;
     }
 
     const result = server.register(username, password, profileName);
     
     if (result.success) {
-      alert('🎉 Registration successful! You can now log in.');
+      alert('Registration successful! You can now log in.');
       
       generatedOTP = '';
       if (otpExpiryTimer) {
@@ -417,20 +394,15 @@ function initRegisterPage() {
         window.location.href = 'login.html';
       }, 1000);
     } else {
-      alert(`❌ Registration failed: ${result.message}`);
+      alert(`Registration failed: ${result.message}`);
     }
   });
 }
 
-// ============================================
-// EXPENSE TRACKER MAIN CLASS
-// ============================================
 class ExpenseTracker {
   constructor() {
-    // Load session data first
     loadSession();
     
-    // Check if user is logged in
     if (!sessionData.token) {
       alert('Please log in to access the expense tracker');
       window.location.href = 'login.html';
@@ -445,8 +417,6 @@ class ExpenseTracker {
     this.renderExpenses();
     this.updateStats();
     this.updateChart();
-    
-    console.log('ExpenseTracker initialized with', this.expenses.length, 'expenses');
   }
 
   initializeEventListeners() {
@@ -500,20 +470,15 @@ class ExpenseTracker {
       timestamp: new Date()
     };
 
-    // Add expense to server/database
     const newExpense = server.addExpense(expense);
-    
-    // Refresh the local expenses array from the server to avoid duplicates
     this.expenses = server.getExpenses();
     
-    // Update UI
     this.renderExpenses();
     this.updateStats();
     this.updateChart();
     this.clearForm();
     
-    alert('✅ Expense added successfully!');
-    console.log('Expense added:', newExpense);
+    alert('Expense added successfully!');
   }
 
   handleSearch(e) {
@@ -554,14 +519,10 @@ class ExpenseTracker {
     if (confirm('Are you sure you want to delete this expense?')) {
       const result = server.deleteExpense(id);
       if (result.success) {
-        // Refresh the local expenses array from the server
         this.expenses = server.getExpenses();
-        
         this.renderExpenses();
         this.updateStats();
         this.updateChart();
-        
-        console.log('Expense deleted:', id);
       }
     }
   }
@@ -737,7 +698,6 @@ class ExpenseTracker {
     window.URL.revokeObjectURL(url);
   }
 
-  // Method to refresh data from storage
   refreshData() {
     this.expenses = server.getExpenses();
     this.renderExpenses();
@@ -746,11 +706,7 @@ class ExpenseTracker {
   }
 }
 
-// ============================================
-// UTILITY FUNCTIONS
-// ============================================
 function createUtilityButtons() {
-  // Logout button
   const logoutBtn = document.createElement('button');
   logoutBtn.textContent = 'Logout';
   logoutBtn.style.cssText = `
@@ -774,7 +730,6 @@ function createUtilityButtons() {
   };
   document.body.appendChild(logoutBtn);
 
-  // Export button
   const exportBtn = document.createElement('button');
   exportBtn.textContent = 'Export CSV';
   exportBtn.style.cssText = `
@@ -797,7 +752,6 @@ function createUtilityButtons() {
   };
   document.body.appendChild(exportBtn);
 
-  // Clear all data button (for debugging)
   const clearBtn = document.createElement('button');
   clearBtn.textContent = 'Clear All Data';
   clearBtn.style.cssText = `
@@ -814,9 +768,9 @@ function createUtilityButtons() {
     font-size: 14px;
   `;
   clearBtn.onclick = () => {
-    if (confirm('⚠️ Are you sure you want to clear ALL data? This cannot be undone!')) {
+    if (confirm('Are you sure you want to clear ALL data? This cannot be undone!')) {
       persistentStorage.clearData();
-      alert('✅ All data cleared! You will be redirected to login.');
+      alert('All data cleared! You will be redirected to login.');
       window.location.href = 'login.html';
     }
   };
@@ -827,7 +781,7 @@ function showWelcomeMessage() {
   const header = document.querySelector('.header h1');
   if (header && sessionData.profileName) {
     const welcomeMsg = document.createElement('p');
-    welcomeMsg.textContent = `👤 Welcome back, ${sessionData.profileName}!`;
+    welcomeMsg.textContent = `Welcome back, ${sessionData.profileName}!`;
     welcomeMsg.style.cssText = `
       margin-top: 10px;
       font-size: 1.1rem;
@@ -838,19 +792,11 @@ function showWelcomeMessage() {
   }
 }
 
-// ============================================
-// MAIN INITIALIZATION
-// ============================================
 document.addEventListener('DOMContentLoaded', () => {
-  // Initialize database first
   fakeDB.init();
   
   const currentPage = getCurrentPage();
-  console.log('Current page:', currentPage);
-  
-  // Load session data on all pages
   loadSession();
-  console.log('Session data:', sessionData);
   
   switch (currentPage) {
     case 'login':
@@ -886,12 +832,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// Global error handling
 window.addEventListener('error', (event) => {
   console.error('Global error:', event.error);
 });
 
-// Prevent navigation away from login/register without proper authentication
 window.addEventListener('beforeunload', (event) => {
   const currentPage = getCurrentPage();
   if (currentPage === 'main' && !sessionData.token) {
@@ -900,7 +844,6 @@ window.addEventListener('beforeunload', (event) => {
   }
 });
 
-// Debug function to check stored data
 window.checkStoredData = function() {
   console.log('=== STORED DATA DEBUG ===');
   console.log('window.name:', window.name);
